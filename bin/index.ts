@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util"
-import { test } from "~/bin/commands/test"
+import { test } from "@/commands/test"
 import { author, name, version } from "~/package.json"
 
 const helpMessage = `Version:

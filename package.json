@@ -14,16 +14,13 @@
     "url": "https://nrjdalal.com"
   },
   "type": "module",
-  "exports": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
-  "bin": "./dist/bin/index.mjs",
+  "bin": "./dist/index.js",
   "files": [
     "dist"
   ],
   "scripts": {
-    "bin": "tsdown && node dist/bin/index.mjs",
-    "build": "tsdown",
-    "dev": "tsdown --watch",
+    "bin": "bun build.ts && bun dist/index.js",
+    "build": "bun build.ts",
     "prepare": "npx simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -46,15 +43,15 @@
     "semi": false
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1",
-    "@ianvs/prettier-plugin-sort-imports": "^4.4.2",
-    "@types/node": "^22.15.32",
-    "lint-staged": "^15.5.2",
-    "prettier": "^3.5.3",
-    "simple-git-hooks": "^2.13.0",
-    "sort-package-json": "^3.2.1",
-    "tsdown": "^0.16.4",
-    "typescript": "^5.8.3"
+    "@commitlint/cli": "^20.2.0",
+    "@commitlint/config-conventional": "^20.2.0",
+    "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
+    "simple-git-hooks": "^2.13.1",
+    "sort-package-json": "^3.6.0",
+    "typescript": "^5.9.3"
   }
 }
