@@ -1,16 +1,11 @@
 #!/usr/bin/env bun
 import { rmSync } from "node:fs"
-import { join, relative } from "node:path"
-import { parseArgs } from "node:util"
+import { relative } from "node:path"
+import utils from "@/utils"
 import { author, name, version } from "~/package.json"
 import { build as bunBuild } from "bun"
 
-type TsBunConfig = {
-  entry?: string | string[]
-  outdir?: string
-  minify?: boolean
-  target?: "bun" | "browser" | "node"
-}
+const { formatSize, loadConfig, parse } = utils
 
 const helpMessage = `Version:
   ${name}@${version}
@@ -25,40 +20,6 @@ Options:
 
 Author:
   ${author.name} <${author.email}> (${author.url})`
-
-const formatSize = (bytes: number) => {
-  if (bytes === 0) return "0 B"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB", "TB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
-}
-
-const loadConfig = async (): Promise<{
-  config: TsBunConfig | null
-  path: string | null
-}> => {
-  const configPath = join(process.cwd(), "tsbun.config.ts")
-  if (await Bun.file(configPath).exists()) {
-    try {
-      const configUrl = `file://${configPath}`
-      const config = await import(configUrl)
-      return { config: config.default || config, path: configPath }
-    } catch (err: any) {
-      console.warn(`Warning: Failed to load tsbun.config.ts: ${err.message}`)
-      return { config: null, path: null }
-    }
-  }
-  return { config: null, path: null }
-}
-
-const parse: typeof parseArgs = (config) => {
-  try {
-    return parseArgs(config)
-  } catch (err: any) {
-    throw new Error(`Error parsing arguments: ${err.message}`)
-  }
-}
 
 const main = async () => {
   try {
