@@ -1,9 +1,17 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process"
 import { existsSync, rmSync } from "node:fs"
+import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { author, name, version } from "~/package.json"
 import { build as bunBuild } from "bun"
+
+type TsBunConfig = {
+  entry?: string | string[]
+  outdir?: string
+  minify?: boolean
+  target?: "bun" | "browser" | "node"
+}
 
 const helpMessage = `Version:
   ${name}@${version}
@@ -18,6 +26,21 @@ Options:
 
 Author:
   ${author.name} <${author.email}> (${author.url})`
+
+const loadConfig = async (): Promise<TsBunConfig | null> => {
+  const configPath = join(process.cwd(), "tsbun.config.ts")
+  if (existsSync(configPath)) {
+    try {
+      const configUrl = `file://${configPath}`
+      const config = await import(configUrl)
+      return config.default || config
+    } catch (err: any) {
+      console.warn(`Warning: Failed to load tsbun.config.ts: ${err.message}`)
+      return null
+    }
+  }
+  return null
+}
 
 const parse: typeof parseArgs = (config) => {
   try {
@@ -51,10 +74,16 @@ const main = async () => {
       process.exit(0)
     }
 
+    // Load config if available
+    const config = await loadConfig()
+    if (config) {
+      console.log("Using tsbun.config.ts...")
+    }
+
     // Determine entry point
     let entry = positionals[0]
     if (!entry) {
-      const defaultEntries = ["index.ts", "src/index.ts", "bin/index.ts"]
+      const defaultEntries = ["index.ts", "src/index.ts"]
       for (const e of defaultEntries) {
         if (existsSync(e)) {
           entry = e
@@ -63,26 +92,39 @@ const main = async () => {
       }
     }
 
+    // Use config entry if no CLI entry provided
+    if (!entry && config?.entry) {
+      if (typeof config.entry === "string") {
+        entry = config.entry
+      } else if (Array.isArray(config.entry) && config.entry.length > 0) {
+        entry = config.entry[0]
+      }
+    }
+
     if (!entry) {
       console.error(
-        "Could not find entry point (index.ts, src/index.ts or bin/index.ts). Please specify one.",
+        "Could not find entry point (index.ts or src/index.ts). Please specify one.",
       )
       process.exit(1)
     }
 
+    const outdir = config?.outdir || "dist"
+    const minify = config?.minify !== undefined ? config.minify : true
+    const target = config?.target || "bun"
+
     console.log(`Building ${entry}...`)
 
     // Clean dist
-    if (existsSync("dist")) {
-      rmSync("dist", { recursive: true })
+    if (existsSync(outdir)) {
+      rmSync(outdir, { recursive: true })
     }
 
     // Bundle with Bun
     const result = await bunBuild({
       entrypoints: [entry],
-      outdir: "dist",
-      target: "bun",
-      minify: true,
+      outdir,
+      target,
+      minify,
     })
 
     if (!result.success) {
@@ -105,7 +147,7 @@ const main = async () => {
       "--noEmit",
       "false",
       "--outDir",
-      "dist",
+      outdir,
     ]
 
     if (hasTsConfig) {
