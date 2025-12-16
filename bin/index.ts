@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
-import { spawnSync } from "node:child_process"
-import { existsSync, rmSync } from "node:fs"
-import { join } from "node:path"
+import { rmSync } from "node:fs"
+import { join, relative } from "node:path"
 import { parseArgs } from "node:util"
 import { author, name, version } from "~/package.json"
 import { build as bunBuild } from "bun"
@@ -27,19 +26,30 @@ Options:
 Author:
   ${author.name} <${author.email}> (${author.url})`
 
-const loadConfig = async (): Promise<TsBunConfig | null> => {
+const formatSize = (bytes: number) => {
+  if (bytes === 0) return "0 B"
+  const k = 1024
+  const sizes = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
+}
+
+const loadConfig = async (): Promise<{
+  config: TsBunConfig | null
+  path: string | null
+}> => {
   const configPath = join(process.cwd(), "tsbun.config.ts")
-  if (existsSync(configPath)) {
+  if (await Bun.file(configPath).exists()) {
     try {
       const configUrl = `file://${configPath}`
       const config = await import(configUrl)
-      return config.default || config
+      return { config: config.default || config, path: configPath }
     } catch (err: any) {
       console.warn(`Warning: Failed to load tsbun.config.ts: ${err.message}`)
-      return null
+      return { config: null, path: null }
     }
   }
-  return null
+  return { config: null, path: null }
 }
 
 const parse: typeof parseArgs = (config) => {
@@ -53,6 +63,7 @@ const parse: typeof parseArgs = (config) => {
 const main = async () => {
   try {
     const args = process.argv.slice(2)
+    const startTime = performance.now()
 
     const { positionals, values } = parse({
       allowPositionals: true,
@@ -75,17 +86,14 @@ const main = async () => {
     }
 
     // Load config if available
-    const config = await loadConfig()
-    if (config) {
-      console.log("Using tsbun.config.ts...")
-    }
+    const { config, path: configPath } = await loadConfig()
 
     // Determine entry point
     let entry = positionals[0]
     if (!entry) {
       const defaultEntries = ["index.ts", "src/index.ts"]
       for (const e of defaultEntries) {
-        if (existsSync(e)) {
+        if (await Bun.file(e).exists()) {
           entry = e
           break
         }
@@ -112,12 +120,23 @@ const main = async () => {
     const minify = config?.minify !== undefined ? config.minify : true
     const target = config?.target || "bun"
 
-    console.log(`Building ${entry}...`)
+    // Start logs
+    console.log(`CLI Building entry: {"${entry}":"${entry}"}`)
+    const hasTsConfig = await Bun.file("tsconfig.json").exists()
+    if (hasTsConfig) {
+      console.log(`CLI Using tsconfig: tsconfig.json`)
+    }
+    console.log(`CLI ${name} v${version}`)
+    if (configPath) {
+      console.log(`CLI Using tsbun config: ${configPath}`)
+    }
+    console.log(`CLI Target: ${target}`)
+    console.log(`CLI Cleaning output folder`)
 
     // Clean dist
-    if (existsSync(outdir)) {
-      rmSync(outdir, { recursive: true })
-    }
+    rmSync(outdir, { recursive: true, force: true })
+
+    console.log(`ESM Build start`)
 
     // Bundle with Bun
     const result = await bunBuild({
@@ -135,12 +154,16 @@ const main = async () => {
       process.exit(1)
     }
 
-    console.log("JS Bundle created!")
+    // Log outputs
+    for (const output of result.outputs) {
+      console.log(
+        `ESM ${relative(process.cwd(), output.path)} ${formatSize(output.size)}`,
+      )
+    }
 
-    // Generate types with tsc
-    console.log("Generating types...")
+    const duration = Math.round(performance.now() - startTime)
+    console.log(`ESM ⚡️ Build success in ${duration}ms`)
 
-    const hasTsConfig = existsSync("tsconfig.json")
     const tscArgs = [
       "--declaration",
       "--emitDeclarationOnly",
@@ -151,7 +174,6 @@ const main = async () => {
     ]
 
     if (hasTsConfig) {
-      console.log("Using tsconfig.json...")
       tscArgs.push("--project", "tsconfig.json")
     } else {
       // Default flags if no config
@@ -166,16 +188,17 @@ const main = async () => {
       )
     }
 
-    const tsc = spawnSync("bun", ["x", "tsc", ...tscArgs], {
-      stdio: "inherit",
+    const tsc = Bun.spawnSync(["bun", "x", "tsc", ...tscArgs], {
+      stdout: "inherit",
+      stderr: "inherit",
+      stdin: "inherit",
     })
 
-    if (tsc.status !== 0) {
+    if (tsc.exitCode !== 0) {
       console.error("Type generation failed!")
       process.exit(1)
     }
 
-    console.log("Build complete!")
     process.exit(0)
   } catch (err: any) {
     console.error(helpMessage)
