@@ -19,8 +19,7 @@
     "dist"
   ],
   "scripts": {
-    "bin": "bun build.ts && bun dist/index.js",
-    "build": "bun build.ts",
+    "build": "bun bin/index.ts",
     "prepare": "npx simple-git-hooks"
   },
   "simple-git-hooks": {

@@ -1,20 +1,20 @@
 #!/usr/bin/env bun
+import { spawnSync } from "node:child_process"
+import { existsSync, rmSync } from "node:fs"
 import { parseArgs } from "node:util"
-import { test } from "@/commands/test"
 import { author, name, version } from "~/package.json"
+import { build as bunBuild } from "bun"
 
 const helpMessage = `Version:
   ${name}@${version}
 
 Usage:
-  $ ${name} <command> [options]
-
-Commands:
-  test           Test command
+  $ ${name} [entry] [options]
 
 Options:
   -v, --version  Display version
-  -h, --help     Display help for <command>
+  -h, --help     Display help message
+  --watch        Watch mode
 
 Author:
   ${author.name} <${author.email}> (${author.url})`
@@ -31,34 +31,109 @@ const main = async () => {
   try {
     const args = process.argv.slice(2)
 
-    switch (args[0]) {
-      case "test":
-        test(args.slice(1))
-        break
-    }
-
     const { positionals, values } = parse({
       allowPositionals: true,
       options: {
         help: { type: "boolean", short: "h" },
         version: { type: "boolean", short: "v" },
+        watch: { type: "boolean" },
       },
+      args,
     })
 
-    if (!args.length) throw new Error(helpMessage)
+    if (values.version) {
+      console.log(`${name}@${version}`)
+      process.exit(0)
+    }
 
-    if (!positionals.length) {
-      if (values.version) {
-        console.log(`${name}@${version}`)
-        process.exit(0)
-      }
-      if (values.help) {
-        console.log(helpMessage)
-        process.exit(0)
+    if (values.help) {
+      console.log(helpMessage)
+      process.exit(0)
+    }
+
+    // Determine entry point
+    let entry = positionals[0]
+    if (!entry) {
+      const defaultEntries = ["index.ts", "src/index.ts", "bin/index.ts"]
+      for (const e of defaultEntries) {
+        if (existsSync(e)) {
+          entry = e
+          break
+        }
       }
     }
 
-    console.error(`unknown command: ${args.join(" ")}`)
+    if (!entry) {
+      console.error(
+        "Could not find entry point (index.ts, src/index.ts or bin/index.ts). Please specify one.",
+      )
+      process.exit(1)
+    }
+
+    console.log(`Building ${entry}...`)
+
+    // Clean dist
+    if (existsSync("dist")) {
+      rmSync("dist", { recursive: true })
+    }
+
+    // Bundle with Bun
+    const result = await bunBuild({
+      entrypoints: [entry],
+      outdir: "dist",
+      target: "bun",
+      minify: true,
+    })
+
+    if (!result.success) {
+      console.error("Build failed!")
+      for (const message of result.logs) {
+        console.error(message)
+      }
+      process.exit(1)
+    }
+
+    console.log("JS Bundle created!")
+
+    // Generate types with tsc
+    console.log("Generating types...")
+
+    const hasTsConfig = existsSync("tsconfig.json")
+    const tscArgs = [
+      "--declaration",
+      "--emitDeclarationOnly",
+      "--noEmit",
+      "false",
+      "--outDir",
+      "dist",
+    ]
+
+    if (hasTsConfig) {
+      console.log("Using tsconfig.json...")
+      tscArgs.push("--project", "tsconfig.json")
+    } else {
+      // Default flags if no config
+      tscArgs.push(
+        "--esModuleInterop",
+        "--skipLibCheck",
+        "--moduleResolution",
+        "bundler",
+        "--target",
+        "esnext",
+        entry,
+      )
+    }
+
+    const tsc = spawnSync("bun", ["x", "tsc", ...tscArgs], {
+      stdio: "inherit",
+    })
+
+    if (tsc.status !== 0) {
+      console.error("Type generation failed!")
+      process.exit(1)
+    }
+
+    console.log("Build complete!")
     process.exit(0)
   } catch (err: any) {
     console.error(helpMessage)
