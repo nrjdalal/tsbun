@@ -42,15 +42,15 @@
     "semi": false
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.2.0",
-    "@commitlint/config-conventional": "^20.2.0",
-    "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
+    "@commitlint/cli": "^20.4.1",
+    "@commitlint/config-conventional": "^20.4.1",
+    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@types/bun": "latest",
     "@types/node": "latest",
     "lint-staged": "^16.2.7",
-    "prettier": "^3.7.4",
+    "prettier": "^3.8.1",
     "simple-git-hooks": "^2.13.1",
-    "sort-package-json": "^3.6.0",
+    "sort-package-json": "^3.6.1",
     "typescript": "^5.9.3"
   }
 }
